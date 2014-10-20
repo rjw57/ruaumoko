@@ -70,6 +70,7 @@ import zipfile
 
 from docopt import docopt
 import requests
+from osgeo import gdal
 from sh import convert
 
 from . import Dataset
@@ -105,6 +106,13 @@ def expand_pattern(pattern, **kwargs):
     for k, v in kwargs.items():
         pattern = pattern.replace('<'+k+'>', v)
     return pattern
+
+def pixel_to_proj(geo_transform, pix_coord):
+    # See http://www.gdal.org/gdal_datamodel.html
+    return (
+        geo_transform[0] + pix_coord[0]*geo_transform[1] + pix_coord[1]*geo_transform[2],
+        geo_transform[3] + pix_coord[0]*geo_transform[4] + pix_coord[1]*geo_transform[5],
+    )
 
 def download(target, temp_dir, host=DEFAULT_HOST, path=DEM_PATH,
         zip_pattern=ZIP_PATTERN, tiff_pattern=TIFF_PATTERN, chunks=None,
@@ -150,6 +158,20 @@ def download(target, temp_dir, host=DEFAULT_HOST, path=DEM_PATH,
             tiff_fobj = pack.open(tiff_info)
             with open(tif_path, 'wb') as out_fobj:
                 shutil.copyfileobj(tiff_fobj, out_fobj)
+
+        # Open chunk with GDAL
+        ds = gdal.Open(tif_path)
+        geo_transform = ds.GetGeoTransform()
+        tl_coord, tr_coord, bl_coord, br_coord = list(
+            pixel_to_proj(geo_transform, p)
+            for p in (
+                (0, 0), (ds.RasterXSize, 0), (0, ds.RasterYSize), (ds.RasterXSize, ds.RasterYSize)
+            )
+        )
+        LOG.info('Chunk top    left:  {0[0]:.2f}, {0[1]:.2f}'.format(tl_coord))
+        LOG.info('Chunk top    right: {0[0]:.2f}, {0[1]:.2f}'.format(tr_coord))
+        LOG.info('Chunk bottom left:  {0[0]:.2f}, {0[1]:.2f}'.format(bl_coord))
+        LOG.info('Chunk bottom right: {0[0]:.2f}, {0[1]:.2f}'.format(br_coord))
 
         # Saving individual chunks
         if chunk_directory is not None:
