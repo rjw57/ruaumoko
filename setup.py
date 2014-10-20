@@ -73,6 +73,7 @@ setup(
 
         # Core functionality
         "magicmemoryview",
+        "GDAL",
 
         # Downloader
         "sh", "requests",
